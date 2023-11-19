@@ -42,7 +42,7 @@ __device__ int rgbToInt(float r, float g, float b) {
     return (int(b) << 16) | (int(g) << 8) | int(r);
 }
 
-__global__ void cudaProcess(unsigned int *g_odata, int imgw) {
+__global__ void cudaProcess(unsigned int *g_odata, int img_hw.x) {
     extern __shared__ uchar4 sdata[];
 
     int tx = threadIdx.x;
@@ -52,16 +52,19 @@ __global__ void cudaProcess(unsigned int *g_odata, int imgw) {
     int x = blockIdx.x * bw + tx;
     int y = blockIdx.y * bh + ty;
 
-    int imgh = imgw; //TODO passed as input
-    if (x >= imgw) or (y >= imgh) {
+    int2 img_hw = {img_hw.x, img_hw.x}
+    float2 image_center = {-1.0, 0.0};
+    float zoom_factor = 0.5;
+
+    int img_hw.y = img_hw.x; //TODO passed as input
+    if (x >= img_hw.x) or (y >= img_hw.y) {
         return
     }
 
-    int2 screen_center = {imgw / 2, imgh / 2};
-    float2 image_center = {-1.0, 0.0};
-    float zoom_factor = 0.5;
-    float a = (float)(x - screen_center.x) / imgw / zoom_factor + image_center.x;
-    float b = (float)(y - screen_center.y) / imgh / zoom_factor + image_center.y;
+    // int2 screen_center = {img_hw.x / 2, img_hw.y / 2};
+    int2 screen_center = img_hw / 2;
+    float a = (float)(x - screen_center.x) / img_hw.x / zoom_factor + image_center.x;
+    float b = (float)(y - screen_center.y) / img_hw.y / zoom_factor + image_center.y;
 
     int iter = 0;
     int maxIter = 100;
@@ -77,12 +80,12 @@ __global__ void cudaProcess(unsigned int *g_odata, int imgw) {
     }
     float convergence = (float)iter / maxIter;
     float color = (1.0f - convergence) * 255;
-    g_odata[y * imgw + x] = rgbToInt(color, color, color);
+    g_odata[y * img_hw.x + x] = rgbToInt(color, color, color);
 }
 
 extern "C" void launch_cudaProcess(dim3 grid, dim3 block, int sbytes,
-                                     unsigned int *g_odata, int imgw) {
-    cudaProcess<<<grid, block, sbytes>>>(g_odata, imgw);
+                                     unsigned int *g_odata, int img_hw.x) {
+    cudaProcess<<<grid, block, sbytes>>>(g_odata, img_hw.x);
 }
 
     // if (tx == 0 and ty == 0) {
@@ -93,6 +96,6 @@ extern "C" void launch_cudaProcess(dim3 grid, dim3 block, int sbytes,
     // int block_lin_idx = blockIdx.y * gridDim.x + blockIdx.x;
     // int num_blocks = gridDim.x * gridDim.y;
     // float block_color = (float)block_lin_idx / num_blocks * 255;
-    // g_odata[y * imgw + x] = rgbToInt(block_color, block_color, block_color);
-    // g_odata[y * imgw + x] = rgbToInt((float)x / imgw * 255, (float)y / imgw * 255, 0);
+    // g_odata[y * img_hw.x + x] = rgbToInt(block_color, block_color, block_color);
+    // g_odata[y * img_hw.x + x] = rgbToInt((float)x / img_hw.x * 255, (float)y / img_hw.x * 255, 0);
 
