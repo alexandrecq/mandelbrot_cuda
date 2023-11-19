@@ -29,12 +29,12 @@ CheckRender *g_CheckRender = NULL;
 
 ////////////////////////////////////////////////////////////////////////////////
 // constants / global variables
-unsigned int window_width = 1024;
-unsigned int window_height = 1024;
-unsigned int image_width = 1024;
-unsigned int image_height = 1024;
-float zoom_factor = 1.0f;
-float2 center = {0.0f, 0.0f};
+int window_width = 2048;
+int window_height = 1024;
+int image_width = window_width;
+int image_height = window_height;
+float zoom_factor = 0.3f;
+float2 image_center = {-0.8f, 0.0f};
 int iGLUTWindowHandle = 0;  // handle to the GLUT window
 
 // pbo and fbo variables
@@ -84,8 +84,8 @@ StopWatchInterface *timer = NULL;
 GLuint shDraw;
 
 ////////////////////////////////////////////////////////////////////////////////
-extern "C" void launch_cudaProcess(dim3 grid, dim3 block, int sbytes,
-                                unsigned int *g_odata, int imgw);
+extern "C" void draw_image(dim3 grid, dim3 block, 
+        unsigned int *g_odata, int2 image_size, float2 image_center, float zoom_factor);
 
 // Forward declarations
 void runStdProgram(int argc, char **argv);
@@ -204,9 +204,13 @@ out_data = cuda_dest_resource;
 // calculate grid size
 // dim3 block(16, 16, 1);
 dim3 block(32, 32, 1);
-dim3 grid(image_width / block.x, image_height / block.y, 1);
+int num_blocks_x = (image_width - 1) / block.x + 1;
+int num_blocks_y = (image_height - 1) / block.y + 1;
+// dim3 grid(image_width / block.x, image_height / block.y, 1);
+dim3 grid(num_blocks_x, num_blocks_y, 1);
 // execute CUDA kernel
-launch_cudaProcess(grid, block, 0, out_data, image_width);
+int2 image_size = {image_width, image_height};
+draw_image(grid, block, out_data, image_size, image_center, zoom_factor);
 
 // CUDA generated data in cuda memory or in a mapped PBO made of BGRA 8 bits
 // 2 solutions, here :
@@ -294,6 +298,7 @@ SDK_CHECK_ERROR_GL();
 ////////////////////////////////////////////////////////////////////////////////
 void display() {
 sdkStartTimer(&timer);
+// glutFullscreen();
 
 if (enable_cuda) {
   generateCUDAImage();
@@ -352,8 +357,8 @@ switch (key) {
 }
 
 void reshape(int w, int h) {
-window_width = w;
-window_height = h;
+    window_width = w;
+    window_height = h;
 }
 
 void mainMenu(int i) { keyboard((unsigned char)i, 0, 0); }

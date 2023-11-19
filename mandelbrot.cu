@@ -1,38 +1,33 @@
-/* Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *  * Neither the name of NVIDIA CORPORATION nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
- * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
- * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
- * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// Utilities and system includes
-
 #include <helper_cuda.h>
 
 // clamp x to range [a, b]
 __device__ float clamp(float x, float a, float b) { return max(a, min(b, x)); }
 
 __device__ int clamp(int x, int a, int b) { return max(a, min(b, x)); }
+
+__device__ void mapValueToColor(float value, float *color) {
+    // Define anchor points with associated colors
+    float anchors[][4] = {
+        {0.0, 0.0, 0.0, 0.0},
+        {0.25, .25, .0, .0},
+        {0.5, .0, .5, .5},
+        {0.75, .0, .0, .75},
+        {1.0, 1.0, 1.0, 1.0}
+    };
+
+    // Find the segment in which the value lies
+    int seg = 0;
+    while (seg < sizeof(anchors) / sizeof(anchors[0]) - 1 && value > anchors[seg + 1][0]) {
+        seg++;
+    }
+
+    // Interpolate between the colors of the two nearest anchor points
+    float t = (value - anchors[seg][0]) / (anchors[seg + 1][0] - anchors[seg][0]);
+    for (int i = 0; i < 3; i++) {
+        color[i] = (1.0 - t) * anchors[seg][i + 1] + t * anchors[seg + 1][i + 1];
+    }
+    color[3] = 1.0;  // Alpha channel (opacity)
+}
 
 // convert floating point rgb color to 8-bit integer
 __device__ int rgbToInt(float r, float g, float b) {
@@ -42,29 +37,20 @@ __device__ int rgbToInt(float r, float g, float b) {
     return (int(b) << 16) | (int(g) << 8) | int(r);
 }
 
-__global__ void cudaProcess(unsigned int *g_odata, int img_hw.x) {
-    extern __shared__ uchar4 sdata[];
-
-    int tx = threadIdx.x;
-    int ty = threadIdx.y;
-    int bw = blockDim.x;
-    int bh = blockDim.y;
-    int x = blockIdx.x * bw + tx;
-    int y = blockIdx.y * bh + ty;
-
-    int2 img_hw = {img_hw.x, img_hw.x}
-    float2 image_center = {-1.0, 0.0};
-    float zoom_factor = 0.5;
-
-    int img_hw.y = img_hw.x; //TODO passed as input
-    if (x >= img_hw.x) or (y >= img_hw.y) {
-        return
+__global__ void draw_image_kernel(unsigned int *g_odata, int2 image_size, 
+                                  float2 image_center, float zoom_factor) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    if (x >= image_size.x | y >= image_size.y) {
+        return;
     }
 
-    // int2 screen_center = {img_hw.x / 2, img_hw.y / 2};
-    int2 screen_center = img_hw / 2;
-    float a = (float)(x - screen_center.x) / img_hw.x / zoom_factor + image_center.x;
-    float b = (float)(y - screen_center.y) / img_hw.y / zoom_factor + image_center.y;
+    // Find real and imaginary parts of c = a + bi
+    int2 screen_center = {image_size.x / 2, image_size.y / 2};
+    float a_norm = (float)(x - screen_center.x) / image_size.x;
+    float b_norm = (float)(y - screen_center.y) / image_size.x;
+    float a = a_norm / zoom_factor + image_center.x;
+    float b = b_norm / zoom_factor + image_center.y;
 
     int iter = 0;
     int maxIter = 100;
@@ -79,23 +65,24 @@ __global__ void cudaProcess(unsigned int *g_odata, int img_hw.x) {
         iter++;
     }
     float convergence = (float)iter / maxIter;
-    float color = (1.0f - convergence) * 255;
-    g_odata[y * img_hw.x + x] = rgbToInt(color, color, color);
+    // float color = (1.0f - convergence) * 255;
+    // g_odata[y * image_size.x + x] = rgbToInt(color, 255 - color, 0);
+    float rgba[4];
+    mapValueToColor(1.0 - convergence, rgba);
+    for (auto& val : rgba) {
+        val *= 255;
+    }
+    g_odata[y * image_size.x + x] = rgbToInt(rgba[0], rgba[1], rgba[2]);
 }
 
-extern "C" void launch_cudaProcess(dim3 grid, dim3 block, int sbytes,
-                                     unsigned int *g_odata, int img_hw.x) {
-    cudaProcess<<<grid, block, sbytes>>>(g_odata, img_hw.x);
+extern "C" void draw_image(dim3 grid, dim3 block, 
+                                   unsigned int *g_odata, int2 image_size,
+                                   float2 image_center, float zoom_factor
+                                   ) {
+    draw_image_kernel<<<grid, block>>>(g_odata, image_size, image_center, zoom_factor);
 }
-
-    // if (tx == 0 and ty == 0) {
-    //     printf("bw: %d, bh: %d\n", bw, bh);
-    //     printf("bIdx.x: %d, bIdx.y: %d\n", blockIdx.x, blockIdx.y);
-    // }
 
     // int block_lin_idx = blockIdx.y * gridDim.x + blockIdx.x;
     // int num_blocks = gridDim.x * gridDim.y;
     // float block_color = (float)block_lin_idx / num_blocks * 255;
-    // g_odata[y * img_hw.x + x] = rgbToInt(block_color, block_color, block_color);
-    // g_odata[y * img_hw.x + x] = rgbToInt((float)x / img_hw.x * 255, (float)y / img_hw.x * 255, 0);
 
