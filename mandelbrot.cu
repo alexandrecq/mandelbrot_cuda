@@ -52,6 +52,39 @@ __global__ void cudaProcess(unsigned int *g_odata, int imgw) {
     int x = blockIdx.x * bw + tx;
     int y = blockIdx.y * bh + ty;
 
+    int imgh = imgw; //TODO passed as input
+    if (x >= imgw) or (y >= imgh) {
+        return
+    }
+
+    int2 screen_center = {imgw / 2, imgh / 2};
+    float2 image_center = {-1.0, 0.0};
+    float zoom_factor = 0.5;
+    float a = (float)(x - screen_center.x) / imgw / zoom_factor + image_center.x;
+    float b = (float)(y - screen_center.y) / imgh / zoom_factor + image_center.y;
+
+    int iter = 0;
+    int maxIter = 100;
+    float maxAmp = 4.0;
+    float zr = 0.0;
+    float zi = 0.0;
+    float zr_temp;
+    while (iter < maxIter and zr*zr + zi*zi < maxAmp) {
+        zr_temp = zr*zr - zi*zi + a;
+        zi = 2*zr*zi + b;
+        zr = zr_temp;
+        iter++;
+    }
+    float convergence = (float)iter / maxIter;
+    float color = (1.0f - convergence) * 255;
+    g_odata[y * imgw + x] = rgbToInt(color, color, color);
+}
+
+extern "C" void launch_cudaProcess(dim3 grid, dim3 block, int sbytes,
+                                     unsigned int *g_odata, int imgw) {
+    cudaProcess<<<grid, block, sbytes>>>(g_odata, imgw);
+}
+
     // if (tx == 0 and ty == 0) {
     //     printf("bw: %d, bh: %d\n", bw, bh);
     //     printf("bIdx.x: %d, bIdx.y: %d\n", blockIdx.x, blockIdx.y);
@@ -61,37 +94,5 @@ __global__ void cudaProcess(unsigned int *g_odata, int imgw) {
     // int num_blocks = gridDim.x * gridDim.y;
     // float block_color = (float)block_lin_idx / num_blocks * 255;
     // g_odata[y * imgw + x] = rgbToInt(block_color, block_color, block_color);
-
-    // uchar4 c4 = make_uchar4((x & 0x20) ? 255 : 0, 0, (y & 0x20) ? 255 : 0, 0);
-    // g_odata[y * imgw + x] = rgbToInt(c4.z, c4.y, c4.x);
-    // uchar4 c4 = make_uchar4(blockIdx.x * 8, blockIdx.y * 8, 0, 0);
-
-    // g_odata[y * imgw + x] = rgbToInt(c4.x, c4.y, c4.z);
-
     // g_odata[y * imgw + x] = rgbToInt((float)x / imgw * 255, (float)y / imgw * 255, 0);
 
-
-    int iter = 0;
-    int maxIter = 100;
-    float maxAmp = 1.0;
-    float zr = 0.0;
-    float zi = 0.0;
-    float zr_temp;
-    float a = (float)x / imgw;
-    float b = (float)y / imgw;
-    while (iter < maxIter and zr*zr + zi*zi < maxAmp) {
-        zr_temp = zr*zr - zi*zi + a;
-        zi = 2*zr*zi + b;
-        zr = zr_temp;
-        iter++;
-    }
-    float convergence = (float)iter / maxIter;
-    float color = (1.0f - convergence) * 255;
-    // printf("a: %.2f, b: %.2f, conv: %.2f\n", a, b, convergence);
-    g_odata[y * imgw + x] = rgbToInt(color, color, color);
-}
-
-extern "C" void launch_cudaProcess(dim3 grid, dim3 block, int sbytes,
-                                     unsigned int *g_odata, int imgw) {
-    cudaProcess<<<grid, block, sbytes>>>(g_odata, imgw);
-}
