@@ -354,27 +354,27 @@ void keyboard(unsigned char key, int /*x*/, int /*y*/) {
     double pan_incr = .05;
     switch (key) {
         case (105):
-            // i, zoom in
+            // I, zoom in
             zoom_factor *= zoom_incr;
             break;
         case (107):
-            // k, zoom out
+            // K, zoom out
             zoom_factor /= zoom_incr;
             break;
-        case (101):
-            // e, up
+        case (119):
+            // W, up
             image_center.y += pan_incr / zoom_factor;
             break;
-        case (100):
-            // d, down
+        case (115):
+            // S, down
             image_center.y -= pan_incr / zoom_factor;
             break;
-        case (115):
-            // s, left
+        case (97):
+            // A, left
             image_center.x -= pan_incr / zoom_factor;
             break;
-        case (102):
-            // f, right
+        case (100):
+            // D, right
             image_center.x += pan_incr / zoom_factor;
             break;
         case (27):
@@ -644,7 +644,8 @@ initCUDABuffers();
 printf(
     "\n"
     "\tControls\n"
-    "\t(right click mouse button for Menu)\n"
+    "\tWASD - move left/right/up/down\n"
+    "\tIK - zoom in/out\n"
     "\t[esc] - Quit\n\n");
 
 // start rendering mainloop
