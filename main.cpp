@@ -1,3 +1,30 @@
+/* Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ *  * Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ *  * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *  * Neither the name of NVIDIA CORPORATION nor the names of its
+ *    contributors may be used to endorse or promote products derived
+ *    from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+ * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+ * PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+ * OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 // USE_TEXSUBIMAGE2D uses glTexSubImage2D() to update the final result
 // commenting it will make the sample use the other way :
 // map a texture in CUDA and blit the result into it
@@ -19,13 +46,6 @@
 // Shared Library Test Functions
 #define MAX_EPSILON 10
 #define REFRESH_DELAY 10  // ms
-
-const char *sSDKname = "simpleCUDA2GL";
-
-unsigned int g_TotalErrors = 0;
-
-// CheckFBO/BackBuffer class objects
-CheckRender *g_CheckRender = NULL;
 
 ////////////////////////////////////////////////////////////////////////////////
 // constants / global variables
@@ -69,9 +89,6 @@ static int fpsCount = 0;
 static int fpsLimit = 1;
 StopWatchInterface *timer = NULL;
 
-#ifndef USE_TEXTURE_RGBA8UI
-#pragma message("Note: Using Texture fmt GL_RGBA16F_ARB")
-#else
 // NOTE: the current issue with regular RGBA8 internal format of textures
 // is that HW stores them as BGRA8. Therefore CUDA will see BGRA where users
 // expected RGBA8. To prevent this issue, the driver team decided to prevent
@@ -79,8 +96,6 @@ StopWatchInterface *timer = NULL;
 // instead, use RGBA8UI which required the additional work of scaling the
 // fragment shader
 // output from 0-1 to 0-255. This is why we have some GLSL code, in this case
-#pragma message("Note: Using Texture RGBA8UI + GLSL for rendering")
-#endif
 GLuint shDraw;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -338,27 +353,27 @@ void keyboard(unsigned char key, int /*x*/, int /*y*/) {
     double zoom_incr = 1.1;
     double pan_incr = .05;
     switch (key) {
-        case (105): 
+        case (105):
             // i, zoom in
             zoom_factor *= zoom_incr;
             break;
-        case (107): 
+        case (107):
             // k, zoom out
             zoom_factor /= zoom_incr;
             break;
-        case (101): 
+        case (101):
             // e, up
             image_center.y += pan_incr / zoom_factor;
             break;
-        case (100): 
+        case (100):
             // d, down
             image_center.y -= pan_incr / zoom_factor;
             break;
-        case (115): 
+        case (115):
             // s, left
             image_center.x -= pan_incr / zoom_factor;
             break;
-        case (102): 
+        case (102):
             // f, right
             image_center.x += pan_incr / zoom_factor;
             break;
@@ -484,7 +499,7 @@ void FreeResource() {
     }
 
     // finalize logs and leave
-    printf("simpleCUDA2GL Exiting...\n");
+    printf("mandelbrot exiting...\n");
 }
 
 void Cleanup(int iExitCode) {
@@ -533,11 +548,9 @@ GLuint compileGLSLprogram(const char *vertex_shader_src,
         glGetShaderiv(f, GL_COMPILE_STATUS, &compiled);
 
         if (!compiled) {
-            //#ifdef NV_REPORT_COMPILE_ERRORS
             char temp[256] = "";
             glGetShaderInfoLog(f, 256, NULL, temp);
             printf("frag Compile failed:\n%s\n", temp);
-            //#endif
             glDeleteShader(f);
             return 0;
         } else {
@@ -674,8 +687,7 @@ bool initGL(int *argc, char **argv) {
     // projection
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
-    gluPerspective(60.0, (GLfloat)window_width / (GLfloat)window_height, 0.1f,
-                   10.0f);
+    gluPerspective(60.0, (GLfloat)window_width / (GLfloat)window_height, 0.1f, 10.0f);
 
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
