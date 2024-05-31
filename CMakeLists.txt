@@ -13,7 +13,6 @@ set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
 
 # Find OpenGL libraries
 set(OpenGL_GL_PREFERENCE "GLVND")
-# set(OpenGL_GL_PREFERENCE "LEGACY")
 find_package(OpenGL REQUIRED)
 if (OPENGL_LIBRARIES)
     message("OpenGL libraries found: ${OPENGL_LIBRARIES}")
@@ -21,17 +20,13 @@ else ()
     message(FATAL_ERROR "OpenGL libraries not found")
 endif ()
 
-# # Find GLUT library
-# set(CMAKE_FIND_DEBUG_MODE TRUE)
-# find_package(GLUT REQUIRED)
-# if (GLUT_LIBRARY)
-#     message("GLUT library found: ${GLUT_LIBRARY}")
-# else ()
-#     message(FATAL_ERROR "GLUT library not found")
-# endif ()
-
-# TODO Figure out why find_package fails to find this file:
-set(GLUT_LIBRARY "/usr/lib/x86_64-linux-gnu/libglut.so")
+# Find GLUT library
+find_package(GLUT REQUIRED)
+if (GLUT_LIBRARIES)
+    message("GLUT libraries found: ${GLUT_LIBRARIES}")
+else ()
+    message(FATAL_ERROR "GLUT libraries not found")
+endif ()
 
 # Include directories for OpenGL and GLUT
 include_directories(${OPENGL_INCLUDE_DIRS} ${GLUT_INCLUDE_DIRS})
@@ -43,10 +38,9 @@ set(CUDA_SOURCES main.cpp mandelbrot.cu)
 cuda_add_executable(mandelbrot ${CUDA_SOURCES})
 
 # Link OpenGL and GLUT libraries
-target_link_libraries(mandelbrot ${OPENGL_LIBRARIES} ${GLUT_LIBRARY})
-
+target_link_libraries(mandelbrot ${OPENGL_LIBRARIES} ${GLUT_LIBRARIES})
 
 # Include directories for helper files
-set(CUDA_SAMPLES_DIR "~/software/cuda/cuda-samples")
+set(CUDA_SAMPLES_DIR "/usr/local/cuda/samples/")
 file(TO_CMAKE_PATH ${CUDA_SAMPLES_DIR} EXPANDED_CUDA_SAMPLES_DIR)
 target_include_directories(mandelbrot PRIVATE "${EXPANDED_CUDA_SAMPLES_DIR}/Common")
